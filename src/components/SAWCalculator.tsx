@@ -645,7 +645,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
       )}
     </div>
   );
-};.employee.name}
+};results.employee.name}
                           {result.employee.hariAlpa > 10 && (
                             <AlertTriangle className="w-4 h-4 text-red-600" />
                           )}

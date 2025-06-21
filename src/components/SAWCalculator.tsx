@@ -675,4 +675,19 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
                           >
                             {result.recommendation}
                           </Badge>
-                          {result
+                          {result.note && (
+                            <p className="text-xs text-gray-600 mt-1">{result.note}</p>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+};

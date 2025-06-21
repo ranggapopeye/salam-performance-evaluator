@@ -116,6 +116,72 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
     fetchCriteriaWeights();
   }, []);
 
+  // Convert raw values to 1-5 scale based on criteria
+  const convertToScale = (value: number, criterion: string): number => {
+    // Performance criteria (1-5 scale from forms)
+    const performanceCriteria = ['kualitasKerja', 'tanggungJawab', 'kuantitasKerja', 'pemahamanTugas', 'inisiatif', 'kerjasama'];
+    
+    if (performanceCriteria.includes(criterion)) {
+      // Already in 1-5 scale, return as is
+      return Math.max(1, Math.min(5, value));
+    }
+    
+    // Count-based criteria - convert to 1-5 scale
+    switch (criterion) {
+      case 'hariAlpa':
+        if (value === 0) return 5;
+        if (value <= 2) return 4;
+        if (value <= 5) return 3;
+        if (value <= 10) return 2;
+        return 1;
+        
+      case 'keterlambatan':
+        if (value === 0) return 5;
+        if (value <= 3) return 4;
+        if (value <= 7) return 3;
+        if (value <= 15) return 2;
+        return 1;
+        
+      case 'hariIzin':
+        if (value === 0) return 5;
+        if (value <= 2) return 4;
+        if (value <= 5) return 3;
+        if (value <= 10) return 2;
+        return 1;
+        
+      case 'hariSakit':
+        if (value === 0) return 5;
+        if (value <= 3) return 4;
+        if (value <= 7) return 3;
+        if (value <= 15) return 2;
+        return 1;
+        
+      case 'pulangCepat':
+        if (value === 0) return 5;
+        if (value <= 2) return 4;
+        if (value <= 5) return 3;
+        if (value <= 10) return 2;
+        return 1;
+        
+      case 'prestasi':
+        if (value >= 5) return 5;
+        if (value >= 3) return 4;
+        if (value >= 2) return 3;
+        if (value >= 1) return 2;
+        return 1;
+        
+      case 'suratPeringatan':
+        if (value === 0) return 5;
+        if (value <= 1) return 4;
+        if (value <= 2) return 3;
+        if (value <= 3) return 2;
+        return 1;
+        
+      default:
+        return Math.max(1, Math.min(5, value));
+    }
+  };
+
   const calculateSAW = async () => {
     if (employees.length === 0) {
       toast({
@@ -150,15 +216,17 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
       
       console.log("Active criteria for calculation:", activeCriteria);
 
-      // Step 1: Create decision matrix (use raw values, no conversion)
+      // Step 1: Create decision matrix with converted values (1-5 scale)
       const matrix = employees.map(emp => 
         activeCriteria.map(criterion => {
           const rawValue = emp[criterion as keyof Employee] as number;
-          return rawValue; // Use raw values directly
+          const convertedValue = convertToScale(rawValue, criterion);
+          console.log(`${emp.name} - ${criterion}: ${rawValue} -> ${convertedValue}`);
+          return convertedValue;
         })
       );
 
-      console.log("Decision Matrix (raw values):", matrix);
+      console.log("Decision Matrix (converted to 1-5 scale):", matrix);
       setDecisionMatrix(matrix);
 
       // Step 2: Normalize matrix using correct SAW formulas
@@ -188,25 +256,15 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
           }
         } else {
           // For Cost criteria: Rij = min(Xij) / Xij
-          // Handle zero values properly
-          const nonZeroValues = columnValues.filter(val => val > 0);
+          const minValue = Math.min(...columnValues);
+          console.log(`Min value for ${criterion}:`, minValue);
           
-          if (nonZeroValues.length === 0) {
-            // If all values are 0, set all normalized values to 1 (best case for cost)
-            for (let i = 0; i < matrix.length; i++) {
+          for (let i = 0; i < matrix.length; i++) {
+            if (matrix[i][j] > 0) {
+              normalized[i][j] = minValue / matrix[i][j];
+            } else {
+              // Handle zero values for cost criteria
               normalized[i][j] = 1;
-            }
-          } else {
-            const minValue = Math.min(...nonZeroValues);
-            console.log(`Min non-zero value for ${criterion}:`, minValue);
-            
-            for (let i = 0; i < matrix.length; i++) {
-              if (matrix[i][j] === 0) {
-                // Zero is the best value for cost criteria
-                normalized[i][j] = 1;
-              } else {
-                normalized[i][j] = minValue / matrix[i][j];
-              }
             }
           }
         }
@@ -229,9 +287,8 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
 
         console.log(`Final SAW score for ${employee.name}:`, finalScore);
 
-        // Convert SAW score (0-1) to 1-5 scale for interpretation
-        // SAW score range is 0-1, so we map it to 1-5 scale
-        const convertedScore = 1 + (finalScore * 4);
+        // Convert SAW score (0-1) to 1-5 scale using the specified rules
+        const convertedScore = convertSAWScoreToScale(finalScore);
         
         // Check for automatic termination due to excessive absence
         const isAutoTerminated = employee.hariAlpa > 10;
@@ -288,6 +345,15 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
     }
   };
 
+  // Convert SAW score (0-1) to 1-5 scale using specified ranges
+  const convertSAWScoreToScale = (sawScore: number): number => {
+    if (sawScore >= 0.85) return 5; // Sangat Baik
+    if (sawScore >= 0.70) return 4; // Baik  
+    if (sawScore >= 0.50) return 3; // Cukup
+    if (sawScore >= 0.30) return 2; // Kurang
+    return 1; // Sangat Kurang
+  };
+
   const getRecommendation = (convertedScore: number, isAutoTerminated: boolean, absentDays: number): { recommendation: string; note?: string } => {
     if (isAutoTerminated) {
       return {
@@ -297,12 +363,12 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
     }
     
     // Use converted score (1-5 scale) for recommendations
-    if (convertedScore >= 4.0) {
+    if (convertedScore >= 4) {
       return {
         recommendation: "Dapat diperpanjang",
         note: "Kandidat promosi"
       };
-    } else if (convertedScore >= 3.0) {
+    } else if (convertedScore >= 3) {
       return {
         recommendation: "Dapat diperpanjang"
       };
@@ -315,10 +381,10 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
   };
 
   const getScoreLabel = (score: number): string => {
-    if (score >= 4.5) return "Sangat Baik";
-    if (score >= 3.5) return "Baik";
-    if (score >= 2.5) return "Cukup";
-    if (score >= 1.5) return "Kurang";
+    if (score >= 5) return "Sangat Baik";
+    if (score >= 4) return "Baik";
+    if (score >= 3) return "Cukup";
+    if (score >= 2) return "Kurang";
     return "Sangat Kurang";
   };
 
@@ -331,7 +397,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
             Perhitungan Simple Additive Weighting (SAW)
           </CardTitle>
           <p className="text-gray-600">
-            Proses perhitungan menggunakan metode SAW dengan rumus standar untuk evaluasi kinerja karyawan
+            Proses perhitungan menggunakan metode SAW dengan normalisasi skala 1-5 untuk evaluasi kinerja karyawan
           </p>
         </CardHeader>
         <CardContent>
@@ -414,10 +480,16 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
             <div className="mt-4 p-3 bg-blue-50 rounded-lg text-sm">
               <h5 className="font-semibold mb-2">Rumus SAW (Simple Additive Weighting):</h5>
               <div className="space-y-1 text-xs">
-                <p><strong>Normalisasi Benefit:</strong> Rij = Xij / max(Xij)</p>
-                <p><strong>Normalisasi Cost:</strong> Rij = min(Xij) / Xij</p>
-                <p><strong>Skor Akhir:</strong> Vi = Σ(Wj × Rij)</p>
-                <p><strong>Konversi ke skala 1-5:</strong> Skor Konversi = 1 + (Vi × 4)</p>
+                <p><strong>1. Konversi ke Skala 1-5:</strong> Semua nilai dikonversi ke skala 1-5</p>
+                <p><strong>2. Normalisasi Benefit:</strong> Rij = Xij / max(Xij)</p>
+                <p><strong>3. Normalisasi Cost:</strong> Rij = min(Xij) / Xij</p>
+                <p><strong>4. Skor Akhir:</strong> Vi = Σ(Wj × Rij)</p>
+                <p><strong>5. Konversi Skor SAW ke Skala Formulir:</strong></p>
+                <p className="ml-4">• 0.85-1.00 = 5 (Sangat Baik)</p>
+                <p className="ml-4">• 0.70-0.84 = 4 (Baik)</p>
+                <p className="ml-4">• 0.50-0.69 = 3 (Cukup)</p>
+                <p className="ml-4">• 0.30-0.49 = 2 (Kurang)</p>
+                <p className="ml-4">• 0.00-0.29 = 1 (Sangat Kurang)</p>
               </div>
             </div>
 
@@ -438,7 +510,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
         <Card className="bg-white shadow-lg">
           <CardHeader>
             <CardTitle className="text-lg text-gray-800">
-              Langkah 1: Matriks Keputusan (X) - Nilai Asli
+              Langkah 1: Matriks Keputusan (X) - Konversi ke Skala 1-5
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -467,7 +539,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
               </table>
             </div>
             <p className="text-xs text-gray-500 mt-2">
-              Menggunakan nilai asli dari data evaluasi karyawan tanpa konversi.
+              Semua nilai telah dikonversi ke skala 1-5 berdasarkan jenis kriteria masing-masing.
             </p>
           </CardContent>
         </Card>
@@ -527,7 +599,8 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
             <div className="mb-4 p-3 bg-green-50 rounded-lg text-sm">
               <p><strong>Rumus SAW:</strong> Vi = Σ(Wj × Rij)</p>
               <p>Dimana Wj adalah bobot kriteria dan Rij adalah nilai ternormalisasi</p>
-              <p><strong>Konversi ke skala 1-5:</strong> Skor Konversi = 1 + (Vi × 4)</p>
+              <p><strong>Konversi Skor SAW (0-1) ke Skala Formulir (1-5):</strong></p>
+              <p>• 0.85-1.00 = 5, • 0.70-0.84 = 4, • 0.50-0.69 = 3, • 0.30-0.49 = 2, • 0.00-0.29 = 1</p>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -536,7 +609,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
                     <th className="text-left py-3 px-4">Rank</th>
                     <th className="text-left py-3 px-4">Nama</th>
                     <th className="text-center py-3 px-4">Skor SAW (Vi)</th>
-                    <th className="text-center py-3 px-4">Skor Konversi</th>
+                    <th className="text-center py-3 px-4">Skor Skala</th>
                     <th className="text-center py-3 px-4">Kategori</th>
                     <th className="text-left py-3 px-4">Rekomendasi</th>
                   </tr>
@@ -557,36 +630,6 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
                       </td>
                       <td className="py-3 px-4 font-medium">
                         <div className="flex items-center gap-2">
-                          {result.employee.name}
-                          {result.employee.hariAlpa > 10 && (
-                            <AlertTriangle className="w-4 h-4 text-red-600" />
-                          )}
-                        </div>
-                      </td>
-                      <td className="text-center py-3 px-4 font-mono">
-                        {result.finalScore.toFixed(4)}
-                      </td>
-                      <td className="text-center py-3 px-4">
-                        <Badge 
-                          variant={result.convertedScore >= 3 && result.employee.hariAlpa <= 10 ? "default" : "destructive"}
-                          className="font-bold"
-                        >
-                          {result.convertedScore.toFixed(1)}
-                        </Badge>
-                      </td>
-                      <td className="text-center py-3 px-4">
-                        <span className="text-sm text-gray-600">
-                          {getScoreLabel(result.convertedScore)}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div>
-                          <Badge 
-                            variant={result.recommendation === "Dapat diperpanjang" ? "default" : "destructive"}
-                            className="mb-1"
-                          >
-                            {result.recommendation}
-                          </Badge>
                           {result.note && (
                             <p className="text-xs text-gray-600 mt-1">{result.note}</p>
                           )}
@@ -602,4 +645,34 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
       )}
     </div>
   );
-};
+};.employee.name}
+                          {result.employee.hariAlpa > 10 && (
+                            <AlertTriangle className="w-4 h-4 text-red-600" />
+                          )}
+                        </div>
+                      </td>
+                      <td className="text-center py-3 px-4 font-mono">
+                        {result.finalScore.toFixed(4)}
+                      </td>
+                      <td className="text-center py-3 px-4">
+                        <Badge 
+                          variant={result.convertedScore >= 3 && result.employee.hariAlpa <= 10 ? "default" : "destructive"}
+                          className="font-bold"
+                        >
+                          {result.convertedScore}
+                        </Badge>
+                      </td>
+                      <td className="text-center py-3 px-4">
+                        <span className="text-sm text-gray-600">
+                          {getScoreLabel(result.convertedScore)}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div>
+                          <Badge 
+                            variant={result.recommendation === "Dapat diperpanjang" ? "default" : "destructive"}
+                            className="mb-1"
+                          >
+                            {result.recommendation}
+                          </Badge>
+                          {result

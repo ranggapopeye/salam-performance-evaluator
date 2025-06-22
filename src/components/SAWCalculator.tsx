@@ -630,22 +630,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
                       </td>
                       <td className="py-3 px-4 font-medium">
                         <div className="flex items-center gap-2">
-                          {result.note && (
-                            <p className="text-xs text-gray-600 mt-1">{result.note}</p>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-    </div>
-  );
-};results.employee.name}
+                          {result.employee.name}
                           {result.employee.hariAlpa > 10 && (
                             <AlertTriangle className="w-4 h-4 text-red-600" />
                           )}
